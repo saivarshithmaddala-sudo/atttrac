@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "cockroachdb"
+  url      = env("DATABASE_URL")
+}
+
+model Candidate {
+  id                String                  @id @default(cuid())
+  aeId              String                  @unique
+  name              String
+  type              CandidateType
+  workLocation      WorkLocation            @default(OFFICE)
+  ctcAnnual         Float
+  joiningDate       DateTime
+  photoUrl          String?
+  active            Boolean                 @default(true)
+  deviceUserId      String                  @unique
+  workingSaturdays  String                  @default("1,3")
+  logs              AttendanceLog[]
+  leaveBalances     LeaveBalance[]
+  payslips          Payslip[]
+  manualAdjustments ManualLeaveAdjustment[]
+
+  @@index([active])
+  @@index([workLocation])
+}
+
+model RawPunchLog {
+  id           String   @id @default(cuid())
+  deviceUserId String
+  timestamp    DateTime
+  punchType    String?
+  source       String
+  processed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([deviceUserId, timestamp])
+  @@index([processed])
+}
+
+model AttendanceLog {
+  id          String    @id @default(cuid())
+  candidateId String
+  date        DateTime
+  loginTime   DateTime?
+  logoutTime  DateTime?
+  status      DayStatus
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, date])
+  @@index([date])
+  @@index([candidateId, date, status])
+}
+
+model LeaveBalance {
+  id               String    @id @default(cuid())
+  candidateId      String
+  month            Int
+  year             Int
+  monthlyQuota     Float
+  carriedForward   Float     @default(0.0)
+  availableLeaves  Float
+  usedLeaves       Float     @default(0.0)
+  lopDays          Float     @default(0.0)
+  nextCarryForward Float     @default(0.0)
+  freeQuota        Float     @default(0.0)
+  excessLeaves     Float     @default(0.0)
+  salaryDeduction  Float     @default(0.0)
+  candidate        Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, month, year])
+  @@index([candidateId, year, month])
+}
+
+model Payslip {
+  id           String    @id @default(cuid())
+  candidateId  String
+  month        Int
+  year         Int
+  ctcAnnual    Float
+  grossMonthly Float
+  perDayRate   Float
+  lopDays      Float
+  lopDeduction Float
+  netPay       Float
+  daysPresent  Int
+  daysOnLeave  Float
+  generatedAt  DateTime  @default(now())
+  candidate    Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([candidateId, month, year])
+}
+
+model ManualLeaveAdjustment {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  date        DateTime
+  credit      Float     @default(0.0)
+  debit       Float     @default(0.0)
+  description String
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId])
+  @@index([date])
+}
+
+enum WorkLocation {
+  OFFICE
+  FIELD
+}
+
+enum CandidateType {
+  FULL_TIME
+  INTERN
+}
+
+enum DayStatus {
+  FULL_DAY_PRESENT
+  FULL_DAY_PRESENT_LATE
+  HALF_DAY
+  FULL_DAY_LEAVE
+  WEEKEND_OFF
+  HOLIDAY
+}
