@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { format, subMonths, addMonths } from 'date-fns'
-import { Search, Filter, ChevronLeft, ChevronRight, Users, Trash2 } from 'lucide-react'
+import { Search, Filter, ChevronLeft, ChevronRight, Users, Trash2, Building2, Calendar, FileSpreadsheet, MapPin, Activity, CheckCircle, ChevronDown } from 'lucide-react'
 import { List } from 'react-window'
 import CandidateCard from './CandidateCard'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-// Forced Turbopack rebuild
 export default function Dashboard({ 
   initialData = [], 
   initialMonth, 
@@ -24,12 +23,11 @@ export default function Dashboard({
 }) {
   const router = useRouter()
   
-  // We don't use 'loading' anymore because data is fetched by RSC before rendering!
   const [data, setData] = useState<any[]>(initialData)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'FULL_TIME' | 'INTERN'>('ALL')
   const [selectedData, setSelectedData] = useState<any | null>(null)
-  const [columns, setColumns] = useState(5) // default for lg
+  const [columns, setColumns] = useState(5)
   const [windowWidth, setWindowWidth] = useState(1200)
 
   useEffect(() => {
@@ -39,9 +37,10 @@ export default function Dashboard({
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth)
-      if (window.innerWidth < 640) setColumns(2)
-      else if (window.innerWidth < 768) setColumns(3)
-      else if (window.innerWidth < 1024) setColumns(4)
+      if (window.innerWidth < 640) setColumns(1)
+      else if (window.innerWidth < 768) setColumns(2)
+      else if (window.innerWidth < 1024) setColumns(3)
+      else if (window.innerWidth < 1280) setColumns(4)
       else setColumns(5)
     }
     handleResize()
@@ -50,12 +49,6 @@ export default function Dashboard({
   }, [])
 
   const currentDate = new Date(initialYear, initialMonth - 1, 1)
-
-  const handleMonthChange = (date: Date) => {
-    const m = date.getMonth() + 1
-    const y = date.getFullYear()
-    router.push(`${basePath}?month=${m}&year=${y}`)
-  }
 
   const handleDeleteCandidate = async (candidateId: string, name: string) => {
     if (!window.confirm(`Are you sure you want to delete candidate ${name}?`)) return
@@ -99,7 +92,17 @@ export default function Dashboard({
     })
   }, [data, search, typeFilter])
 
+  // Advanced metrics calculation
   const totalCandidates = data.length
+  const officeCount = data.filter(d => d.candidate.workLocation === 'OFFICE').length
+  const fieldCount = data.filter(d => d.candidate.workLocation === 'FIELD').length
+  const avgPresentDays = data.length > 0 
+    ? (data.reduce((sum, d) => sum + (d.payslip?.daysPresent || 0), 0) / data.length)
+    : 0
+  const attendanceRate = data.length > 0 
+    ? Math.min(100, Math.round((avgPresentDays / 24) * 100))
+    : 0
+  const totalLeaves = data.reduce((sum, d) => sum + (d.balance?.usedLeaves || 0), 0)
 
   // Virtualized row component
   const Row = ({ index, style, items, columns }: { index: number, style: any, items: any[], columns: number }) => {
@@ -108,46 +111,78 @@ export default function Dashboard({
 
     return (
       <div style={style} className="flex gap-4 px-1 pb-4">
-        {rowItems.map((d) => (
-          <div 
-            key={d.candidate.id} 
-            style={{ width: `calc(${100 / columns}% - ${16 * (columns - 1) / columns}px)` }}
-            className="bg-card border border-card-border p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all hover:border-accent/50 flex flex-col items-center text-center gap-3 relative group"
-          >
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(d.candidate.id, d.candidate.name); }}
-              className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100"
-              title="Delete Candidate"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            {/* Status Badge */}
-            <div className={`absolute top-2 left-2 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${d.status === 'Finalized' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-              {d.status}
-            </div>
+        {rowItems.map((d) => {
+          const isFullTime = d.candidate.type === 'FULL_TIME'
+          const netPay = Math.round(d.netPayTillDate || d.payslip?.netPay || 0)
 
-            <div className="w-full flex flex-col items-center mt-3" onClick={() => setSelectedData(d)}>
-              <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 mt-2">
-                {d.candidate.photoUrl ? (
-                  <img src={d.candidate.photoUrl} alt={d.candidate.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-xl font-bold text-slate-600 uppercase">
-                    {d.candidate.name.charAt(0)}
-                  </span>
-                )}
+          return (
+            <div 
+              key={d.candidate.id} 
+              style={{ width: `calc(${100 / columns}% - ${16 * (columns - 1) / columns}px)` }}
+              className="bg-card border border-card-border p-5 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_50px_rgba(15,118,110,0.07)] hover:scale-[1.01] hover:-translate-y-0.5 cursor-pointer transition-all duration-300 hover:border-accent/40 flex flex-col items-center gap-4 relative group"
+              onClick={() => setSelectedData(d)}
+            >
+              {/* Delete Button (visible on hover) */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(d.candidate.id, d.candidate.name); }}
+                className="absolute top-3 right-3 p-1.5 bg-red-50/80 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-100 shadow-sm"
+                title="Delete Candidate"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Status Badge */}
+              <div className={`absolute top-3 left-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm ${d.status === 'Finalized' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50' : 'bg-amber-50 text-amber-700 border border-amber-200/50'}`}>
+                {d.status}
               </div>
-              <div className="w-full">
-                <h3 className="font-semibold text-foreground truncate w-full px-2 mt-2" title={d.candidate.name}>{d.candidate.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">{d.candidate.aeId}</p>
-                <div className="mt-2 w-full flex justify-center">
-                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${d.candidate.type === 'FULL_TIME' ? 'bg-accent/10 text-accent' : 'bg-purple-100 text-purple-700'}`}>
-                    {d.candidate.type === 'FULL_TIME' ? 'Full-Time' : 'Intern'}
+
+              {/* Avatar with gradient border/glow */}
+              <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-accent to-emerald-400 shadow-sm flex items-center justify-center shrink-0 mt-3">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                  {d.candidate.photoUrl ? (
+                    <img src={d.candidate.photoUrl} alt={d.candidate.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center text-white font-bold text-xl uppercase bg-gradient-to-br ${isFullTime ? 'from-teal-600 to-emerald-400' : 'from-indigo-600 to-violet-400'}`}>
+                      {d.candidate.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Candidate Info */}
+              <div className="w-full text-center">
+                <h3 className="font-semibold text-slate-800 text-sm truncate px-1" title={d.candidate.name}>
+                  {d.candidate.name}
+                </h3>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-wider">{d.candidate.aeId}</p>
+                <div className="mt-2 flex justify-center">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide border ${isFullTime ? 'bg-teal-50 text-teal-700 border-teal-200/40' : 'bg-violet-50 text-violet-700 border-violet-200/40'}`}>
+                    {isFullTime ? 'Full-Time' : 'Intern'}
                   </span>
                 </div>
               </div>
+
+              {/* Subtle divider */}
+              <div className="w-full h-[1px] bg-slate-100 mt-1" />
+
+              {/* Mini Stats Panel */}
+              <div className="w-full grid grid-cols-3 gap-1 text-[10px] text-slate-500 font-medium text-center">
+                <div>
+                  <div className="text-slate-400 text-[9px] font-normal">Present</div>
+                  <div className="text-slate-700 font-bold mt-0.5">{d.payslip?.daysPresent || 0}d</div>
+                </div>
+                <div className="border-x border-slate-100">
+                  <div className="text-slate-400 text-[9px] font-normal">Leaves</div>
+                  <div className="text-slate-700 font-bold mt-0.5">{d.balance?.usedLeaves || 0}d</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-[9px] font-normal">Net Pay</div>
+                  <div className="text-accent font-bold mt-0.5">₹{netPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -157,123 +192,187 @@ export default function Dashboard({
   return (
     <>
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full relative ${selectedData ? 'print:hidden' : ''}`}>
-        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-              {title}
-            </h1>
-            <p className="text-slate-500 mt-1">Manage employee attendance and payslips</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-4">
-            <Link 
-              href="/" 
-              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl font-semibold text-sm transition-colors shadow-sm flex items-center gap-2"
-            >
-              Return to Home Page
-            </Link>
-            <Link 
-              href="/biometric" 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors shadow-sm flex items-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" /></svg>
-              Biometric Settings
-            </Link>
-            <Link 
-              href="/admin" 
-              className="bg-slate-800 hover:bg-slate-950 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors shadow-sm flex items-center gap-2"
-            >
-              Go to Admin Portal
-            </Link>
+        
+        {/* Modern Top Navbar Header */}
+        <header className="mb-10 flex flex-col gap-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200/80 pb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center shadow-sm">
+                <span className="text-white font-mono text-sm font-bold">A</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  {title}
+                </h1>
+                <p className="text-xs text-slate-400 font-medium">Enterprise Workspace Analytics</p>
+              </div>
+            </div>
             
-            <div className="flex items-center bg-card border border-card-border h-[38px] px-2 rounded-xl shadow-sm text-sm font-semibold text-slate-700">
+            {/* Header Navigation Actions */}
+            <div className="flex flex-wrap items-center gap-3">
+              <Link 
+                href="/" 
+                className="bg-white border border-slate-200/60 hover:bg-slate-50 hover:border-slate-300 text-slate-600 px-3.5 py-2 rounded-xl font-medium text-xs transition-all shadow-sm flex items-center gap-2"
+              >
+                Return to Home
+              </Link>
+              <Link 
+                href="/biometric" 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl font-medium text-xs transition-all shadow-sm flex items-center gap-2"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Biometric Settings
+              </Link>
+              <Link 
+                href="/admin" 
+                className="bg-slate-900 hover:bg-slate-950 text-white px-3.5 py-2 rounded-xl font-medium text-xs transition-all shadow-sm flex items-center gap-2"
+              >
+                Go to Admin Portal
+              </Link>
+            </div>
+          </div>
+
+          {/* Month Navigation & Dashboard Title Hero */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Monthly Performance Overview</p>
+              <h2 className="text-lg font-bold text-slate-800 mt-1">Workspace Summary</h2>
+            </div>
+            
+            {/* Tactical Month Selector */}
+            <div className="flex items-center bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm text-xs font-semibold text-slate-700">
               <Link 
                 href={`${basePath}?month=${subMonths(currentDate, 1).getMonth() + 1}&year=${subMonths(currentDate, 1).getFullYear()}`}
-                className="p-1 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+                className="p-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-lg transition-all flex items-center justify-center text-slate-500 hover:text-slate-900"
               >
-                <ChevronLeft className="w-4 h-4 text-slate-500" />
+                <ChevronLeft className="w-4 h-4" />
               </Link>
-              <div className="w-28 text-center font-semibold text-slate-700">
+              <div className="w-32 text-center font-bold text-slate-800 flex items-center justify-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-accent" />
                 {format(currentDate, 'MMMM yyyy')}
               </div>
               <Link 
                 href={`${basePath}?month=${addMonths(currentDate, 1).getMonth() + 1}&year=${addMonths(currentDate, 1).getFullYear()}`}
-                className="p-1 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+                className="p-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-lg transition-all flex items-center justify-center text-slate-500 hover:text-slate-900"
               >
-                <ChevronRight className="w-4 h-4 text-slate-500" />
+                <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
         </header>
 
-        {/* Summary Strip */}
-        <div className="flex mb-8">
-          <div className="bg-card border border-card-border p-5 rounded-2xl shadow-sm flex items-center gap-4 min-w-[250px]">
-            <div className="w-12 h-12 bg-accent/10 text-accent rounded-xl flex items-center justify-center shrink-0">
-              <Users className="w-6 h-6" />
+        {/* Extended 4-Column Metrics Summary Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          
+          {/* Card 1: Total candidates */}
+          <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center gap-4">
+            <div className="w-11 h-11 bg-accent/10 text-accent rounded-xl flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-medium text-slate-500">Total Candidates</div>
-              <div className="text-2xl font-bold">{totalCandidates}</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Candidates</div>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{totalCandidates}</div>
+            </div>
+          </div>
+
+          {/* Card 2: Active Locations (Office / Field) */}
+          <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center gap-4">
+            <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Duty Stations</div>
+              <div className="text-sm font-bold text-slate-800 mt-1 flex items-center gap-2">
+                <span className="bg-blue-50/60 px-2 py-0.5 rounded border border-blue-100 text-blue-700 font-mono text-xs">{officeCount} Office</span>
+                <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600 font-mono text-xs">{fieldCount} Field</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Avg Attendance Rate */}
+          <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center gap-4">
+            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Avg Attendance</div>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5 flex items-baseline gap-1">
+                {avgPresentDays.toFixed(1)}d
+                <span className="text-xs text-emerald-500 font-semibold">({attendanceRate}%)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Leaves Utilized */}
+          <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex items-center gap-4">
+            <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Leaves</div>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{totalLeaves.toFixed(1)}d</div>
             </div>
           </div>
         </div>
 
-        {/* Controls */}
+        {/* Controls Bar */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
             <input 
               type="text" 
               placeholder="Search by name or AE ID..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-card border border-card-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow"
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-all shadow-[0_1px_3px_rgba(0,0,0,0.01)] text-slate-700 text-sm"
             />
           </div>
-          <div className="relative w-full sm:w-48">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <div className="relative w-full sm:w-56">
+            <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 pointer-events-none" />
             <select 
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as any)}
-              className="w-full pl-10 pr-4 py-2.5 bg-card border border-card-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 transition-shadow appearance-none cursor-pointer"
+              className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-all shadow-[0_1px_3px_rgba(0,0,0,0.01)] appearance-none cursor-pointer text-slate-700 text-sm font-medium"
             >
-              <option value="ALL">All Types</option>
-              <option value="FULL_TIME">Full-Time</option>
-              <option value="INTERN">Intern</option>
+              <option value="ALL">All Employment Types</option>
+              <option value="FULL_TIME">Full-Time Staff</option>
+              <option value="INTERN">Interns</option>
             </select>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <ChevronDown className="w-4 h-4" />
+            </div>
           </div>
         </div>
 
         {/* Cards Grid */}
         {filteredData.length > 0 ? (
-          <div className="w-full" style={{ height: '600px' }}>
+          <div className="w-full" style={{ height: '620px' }}>
             <List
               rowCount={rowCount}
-              rowHeight={220}
+              rowHeight={230}
               rowComponent={Row as any}
               rowProps={{ items: filteredData, columns }}
-              style={{ height: 600, width: '100%' }}
+              style={{ height: 620, width: '100%' }}
             />
           </div>
         ) : (
-          <div className="text-center py-20 bg-card border border-card-border rounded-2xl shadow-sm">
-            <p className="text-slate-500">No candidates found for the selected filters.</p>
+          <div className="text-center py-24 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+            <p className="text-slate-400 font-medium text-sm">No workspace candidates found matching your filters.</p>
           </div>
         )}
       </div>
 
-      {/* Modal Overlay */}
+      {/* Premium Glassmorphic Modal Overlay */}
       {selectedData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto print:static print:block print:bg-transparent print:p-0" onClick={(e) => {
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md overflow-y-auto print:static print:block print:bg-transparent print:p-0" onClick={(e) => {
           if (e.target === e.currentTarget) setSelectedData(null)
         }}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative animate-in fade-in zoom-in-95 duration-200 print:max-w-none print:shadow-none print:max-h-none print:overflow-visible">
+          <div className="bg-white border border-slate-200/50 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto relative animate-in fade-in zoom-in-95 duration-200 print:max-w-none print:shadow-none print:max-h-none print:overflow-visible">
             <button 
               onClick={() => setSelectedData(null)}
-              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-colors z-10 print:hidden"
+              className="absolute top-4 right-4 p-2 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 rounded-full text-slate-500 hover:text-slate-800 transition-all z-10 shadow-sm print:hidden"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
             <div className="p-2 sm:p-6 print:p-0">
               <CandidateCard 
@@ -290,3 +389,4 @@ export default function Dashboard({
     </>
   )
 }
+
